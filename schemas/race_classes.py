@@ -9,16 +9,18 @@ class RaceInfo(BaseModel):
     country: str
     season: int
     round: int
-    date: str
-    time: str
+    raceDateTime: str
+    dateTimeUtc: str
 
 class Track(BaseModel):
     name: str
-    map: str
-    trackDescription: str
+    mapUri: str
+    description: str
     turns: int
     laps: int
     distance: int
+    drsDetectionZones: int
+    drsZones: int
 
 class Weather(BaseModel):
     qualifying: str

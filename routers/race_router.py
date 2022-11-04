@@ -8,6 +8,5 @@ from api import race_data
 router = APIRouter(prefix="/api")
 
 @router.get("/latest", response_model=race_classes.RaceData)
-# @router.get("/latest")
 def latest_race_data():
     return race_data.get_latest_race_data()

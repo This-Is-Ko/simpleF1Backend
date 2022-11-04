@@ -7,6 +7,15 @@ import requests_cache
 from fastapi import FastAPI, HTTPException
 import re
 from datetime import datetime, timedelta
+import csv
+from pathlib import Path
+from unidecode import unidecode
+from tzwhere import tzwhere
+import pytz
+
+from .weather_code_converter import convert_weather_code
+
+TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 
 def get_latest_race_data():
     requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
@@ -16,41 +25,68 @@ def get_latest_race_data():
         raise HTTPException(status_code=503, detail="Upstream error")
     race = race_response["MRData"]["RaceTable"]["Races"][0]
 
+    # Find race timezone
+    tz = tzwhere.tzwhere()
+    timezone = tz.tzNameAt(float(race["Circuit"]["Location"]["lat"]),float(race["Circuit"]["Location"]["long"]))
+    race_timezone = pytz.timezone(timezone)
+    # Create datetime object 
+    race_datetime_str = str(race["date"]) + " " + str(race["time"])
+    race_datetime = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M:%SZ")
+    # Set datetime to greenwich time
+    gmt = pytz.timezone('GMT')
+    race_datetime_gmt = gmt.localize(race_datetime)
+
+    # Convert datetime to race location timezone and send
     race_info = race_classes.RaceInfo(
         name = race["raceName"],
         city = race["Circuit"]["Location"]["locality"],
         country = race["Circuit"]["Location"]["country"],
         season = race["season"],
         round = race["round"],
-        date = race["date"],
-        time = race["time"]
+        raceDateTime = race_datetime_gmt.astimezone(race_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+        dateTimeUtc = race_datetime_gmt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
     )
 
-    # TODO Need to add track data
+    # Track data
+    # Set default values
+    map_uri=description = ""
+    turns=laps=drs_detection_zones=drs_zones=distance=0
+    
+    # Retrieve track data from local csv
+    track_csv = csv.reader(open(TRACK_INFORMATION, "r"))
+    for track in track_csv:
+        if track[0] == unidecode(race["Circuit"]["circuitName"]):
+            map_uri = track[1]
+            turns = track[2]
+            laps = track[3]
+            distance = track[4]
+            drs_detection_zones = track[5]
+            drs_zones = track[6]
+            description = track[7]
+            
     track = race_classes.Track(
         name = race["Circuit"]["circuitName"],
-        map = "",
-        trackDescription = "",
-        turns = 1,
-        laps = 1,
-        distance = 1
+        mapUri = map_uri,
+        description = description,
+        turns = turns,
+        laps = laps,
+        drsDetectionZones = drs_detection_zones,
+        drsZones = drs_zones,
+        distance = distance
     )
 
-    
+    # Weather data
     weather_url = "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&start_date={quali_date}&end_date={race_date}".format(
         lat=race["Circuit"]["Location"]["lat"],
         long=race["Circuit"]["Location"]["long"],
         quali_date=(datetime.strptime(race["date"], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"),
         race_date=race["date"]
     )
-    
     weather_response = call_data_source(weather_url)
-
-    # TODO Need to add weather data
     weather = race_classes.Weather(
-        qualifying = weather_response["daily"]["weathercode"][0],
+        qualifying = convert_weather_code(str(weather_response["daily"]["weathercode"][0])),
         qualifyingTemp = str(weather_response["daily"]["temperature_2m_min"][0]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][0]) + "°C",
-        race = weather_response["daily"]["weathercode"][1],
+        race = convert_weather_code(str(weather_response["daily"]["weathercode"][1])),
         raceTemp = str(weather_response["daily"]["temperature_2m_min"][0]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][0]) + "°C"
     )
 
@@ -58,7 +94,7 @@ def get_latest_race_data():
         link = ""
     )
     
-    # Map race result data
+    # Race result data
     race_results = []
     for entry in race["Results"]:
 
@@ -90,7 +126,7 @@ def get_latest_race_data():
         )
         race_results.append(driver_standing_entry)
 
-    # Map drivers standings data
+    # Drivers standings data
     driver_standing_response = call_data_source("http://ergast.com/api/f1/current/driverStandings.json")
     if driver_standing_response == {}:
         raise HTTPException(status_code=503, detail="Upstream error")
@@ -107,7 +143,7 @@ def get_latest_race_data():
         )
         driver_standing.append(driver_standing_entry)
 
-    # Map constructors standings data
+    # Constructors standings data
     constructor_standing_response = call_data_source("http://ergast.com/api/f1/current/constructorStandings.json")
     if constructor_standing_response == {}:
         raise HTTPException(status_code=503, detail="Upstream error")
@@ -122,7 +158,7 @@ def get_latest_race_data():
         )
         constructor_standing.append(constructor_standing_entry)
 
-    # Map info on next race
+    # Next race data
     # TODO trackDescription
     url = "http://ergast.com/api/f1/{year}/{round}.json".format(year=race_info.season, round=race_info.round + 1)
     next_race_response = call_data_source(url)
@@ -149,7 +185,6 @@ def get_latest_race_data():
         nextRace = next_race
     )
 
-    print(race_data)
     return race_data
 
 def call_data_source(api_url):
