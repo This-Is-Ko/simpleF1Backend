@@ -22,7 +22,9 @@ class Track(BaseModel):
 
 class Weather(BaseModel):
     qualifying: str
+    qualifyingTemp: str
     race: str
+    raceTemp: str
 
 class Highlights(BaseModel):
     link: str
@@ -35,6 +37,7 @@ class ResultEntry(BaseModel):
     points: int
     team: str
     teamLogoUri: str
+    teamLogoAlt: str
     fastestLap: str
 
 class DriverStandingEntry(BaseModel):
@@ -44,12 +47,14 @@ class DriverStandingEntry(BaseModel):
     points: int
     team: str
     teamLogoUri: str
+    teamLogoAlt: str
 
 class ConstructorStandingEntry(BaseModel):
     position: int
     name: str
     points: int
     teamLogoUri: str
+    teamLogoAlt: str
 
 class NextRace(BaseModel):
     name: str
