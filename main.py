@@ -1,13 +1,11 @@
-from typing import Union
-
-from fastapi import APIRouter, FastAPI
-from pydantic import BaseModel
-
-from routers import race_router
-
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+from routers import race_router
 
 app = FastAPI()
 
@@ -19,6 +17,7 @@ def server_status():
 
 origins = [
     "http://localhost:3000",
+    os.environ.get("FRONTEND_URI")
 ]
 
 app.add_middleware(
