@@ -15,21 +15,22 @@ class RaceInfo(BaseModel):
 class Track(BaseModel):
     name: str
     mapUri: str
-    description: str
     turns: int
     laps: int
     distance: int
     drsDetectionZones: int
     drsZones: int
+    
+class WeatherEntry(BaseModel):
+    type: str
+    temp: str
 
 class Weather(BaseModel):
-    qualifying: str
-    qualifyingTemp: str
-    race: str
-    raceTemp: str
+    qualifying: WeatherEntry
+    race: WeatherEntry
 
 class Highlights(BaseModel):
-    link: str
+    uri: str
 
 class ResultEntry(BaseModel):
     position: int
@@ -41,6 +42,7 @@ class ResultEntry(BaseModel):
     teamLogoUri: str
     teamLogoAlt: str
     fastestLap: str
+    fastestLapRank: int
 
 class DriverStandingEntry(BaseModel):
     position: int
@@ -62,9 +64,8 @@ class NextRace(BaseModel):
     name: str
     country: str
     track: str
-    date: str
-    time: str
-    trackDescription: str
+    raceDateTime: str
+    dateTimeUtc: str
 
 class RaceData(BaseModel):
     race: RaceInfo

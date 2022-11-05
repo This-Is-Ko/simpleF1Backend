@@ -16,6 +16,7 @@ import pytz
 from .weather_code_converter import convert_weather_code
 
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
+HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
 
 def get_latest_race_data():
     requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
@@ -67,7 +68,6 @@ def get_latest_race_data():
     track = race_classes.Track(
         name = race["Circuit"]["circuitName"],
         mapUri = map_uri,
-        description = description,
         turns = turns,
         laps = laps,
         drsDetectionZones = drs_detection_zones,
@@ -83,15 +83,29 @@ def get_latest_race_data():
         race_date=race["date"]
     )
     weather_response = call_data_source(weather_url)
+    quali_weather = race_classes.WeatherEntry(
+        type = convert_weather_code(str(weather_response["daily"]["weathercode"][0])),
+        temp = str(weather_response["daily"]["temperature_2m_min"][0]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][0]) + "°C",
+    )
+    race_weather = race_classes.WeatherEntry(
+        type = convert_weather_code(str(weather_response["daily"]["weathercode"][1])),
+        temp = str(weather_response["daily"]["temperature_2m_min"][1]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][1]) + "°C"
+    )
     weather = race_classes.Weather(
-        qualifying = convert_weather_code(str(weather_response["daily"]["weathercode"][0])),
-        qualifyingTemp = str(weather_response["daily"]["temperature_2m_min"][0]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][0]) + "°C",
-        race = convert_weather_code(str(weather_response["daily"]["weathercode"][1])),
-        raceTemp = str(weather_response["daily"]["temperature_2m_min"][0]) + "°C - " + str(weather_response["daily"]["temperature_2m_max"][0]) + "°C"
+        qualifying = quali_weather,
+        race = race_weather
     )
 
+
+    # Retrieve track data from local csv
+    highlights_uri = ""
+    highlights_csv = csv.reader(open(HIGHLIGHTS_INFORMATION, "r"))
+    for highlights in highlights_csv:
+        if highlights[0] == unidecode(race["season"]) and highlights[1] == unidecode(race["round"]):
+            highlights_uri = highlights[3]
+
     highlights = race_classes.Highlights(
-        link = ""
+        uri = highlights_uri
     )
     
     # Race result data
@@ -99,9 +113,9 @@ def get_latest_race_data():
     for entry in race["Results"]:
 
         # Store only fastest lap driver
-        fastest_lap = ""
-        if entry["FastestLap"]["rank"] == "1":
-            fastest_lap = entry["FastestLap"]["Time"]["time"]
+        # fastest_lap_rank = ""
+        # if entry["FastestLap"]["rank"] == "1":
+        #     fastest_lap = entry["FastestLap"]["Time"]["time"]
 
         # Handle timings after 1 lap and DNFs
         if entry["status"] != "Finished":
@@ -122,7 +136,8 @@ def get_latest_race_data():
             team = entry["Constructor"]["name"],
             teamLogoUri = entry["Constructor"]["name"].replace(" ",""),
             teamLogoAlt = entry["Constructor"]["name"] + " logo",
-            fastestLap = fastest_lap
+            fastestLap = entry["FastestLap"]["Time"]["time"],
+            fastestLapRank = entry["FastestLap"]["rank"]
         )
         race_results.append(driver_standing_entry)
 
@@ -158,20 +173,29 @@ def get_latest_race_data():
         )
         constructor_standing.append(constructor_standing_entry)
 
-    # Next race data
-    # TODO trackDescription
+    # Next race data    
     url = "http://ergast.com/api/f1/{year}/{round}.json".format(year=race_info.season, round=race_info.round + 1)
     next_race_response = call_data_source(url)
     if next_race_response == {}:
         raise HTTPException(status_code=503, detail="Upstream error")
     next_race_data = next_race_response["MRData"]["RaceTable"]["Races"][0]
+    
+    # Find race timezone
+    timezone = tz.tzNameAt(float(next_race_data["Circuit"]["Location"]["lat"]),float(next_race_data["Circuit"]["Location"]["long"]))
+    next_race_timezone = pytz.timezone(timezone)
+    # Create datetime object 
+    next_race_datetime_str = str(next_race_data["date"]) + " " + str(next_race_data["time"])
+    next_race_datetime = datetime.strptime(next_race_datetime_str, "%Y-%m-%d %H:%M:%SZ")
+    # Set datetime to greenwich time
+    gmt = pytz.timezone('GMT')
+    next_race_datetime_gmt = gmt.localize(next_race_datetime)
+    
     next_race = race_classes.NextRace(
         name = next_race_data["raceName"],
         country = next_race_data["Circuit"]["Location"]["country"],
         track = next_race_data["Circuit"]["circuitName"],
-        date = next_race_data["date"],
-        time = next_race_data["time"],
-        trackDescription = ""
+        raceDateTime = next_race_datetime_gmt.astimezone(next_race_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+        dateTimeUtc = next_race_datetime_gmt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S GMT"),
     )
 
     race_data = race_classes.RaceData(
