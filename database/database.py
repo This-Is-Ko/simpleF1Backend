@@ -1,9 +1,10 @@
 from pymongo import MongoClient
-from dotenv import dotenv_values
-config = dotenv_values(".env")
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-mongodb_client = MongoClient(config["ATLAS_URI"])
-db = mongodb_client[config["DB_NAME"]]
+mongodb_client = MongoClient(os.environ.get("ATLAS_URI"))
+db = mongodb_client[os.environ.get("DB_NAME")]
 
 def get_mongodb_client():
     return db
