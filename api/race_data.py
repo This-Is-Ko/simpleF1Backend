@@ -22,7 +22,7 @@ cache = {}
 
 def get_latest_race_data(request):
     # Enable in dev env
-    requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
+    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
     
     # Simple in-memory caching response - 15 minutes 
     global cache
