@@ -21,9 +21,13 @@ def server_status():
 def server_status():
     return config
 
+@app.get("/envtest1")
+def server_status():
+    return os.environ
+
 origins = [
     '*',
-    config["FRONTEND_URI"],
+    os.environ.get("FRONTEND_URI"),
 ]
 
 app.add_middleware(
