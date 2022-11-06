@@ -16,11 +16,9 @@ def server_status():
     return {"status": "healthy"}
 
 origins = [
-    "http://localhost:3000",
+    '*',
     os.environ.get("FRONTEND_URI"),
 ]
-
-print(origins)
 
 app.add_middleware(
     CORSMiddleware,
