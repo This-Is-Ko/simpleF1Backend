@@ -32,7 +32,7 @@ def get_latest_race_data(request):
     global cache
     if "race_data" in cache:
         if cache["expiry"] > datetime.now():
-            if "track" in cache["race_data"] and map_uri in cache["race_data"]["track"] and cache["race_data"]["track"]["map_uri"] != "":
+            if "track" in cache["race_data"] and mapUri in cache["race_data"]["track"] and cache["race_data"]["track"]["mapUri"] != "":
                 return cache["race_data"]
         else:
             cache = {}
