@@ -20,8 +20,9 @@ HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
 
 cache = {}
 
-def get_latest_race_data():
-    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
+def get_latest_race_data(request):
+    # Enable in dev env
+    requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
     
     # Simple in-memory caching response - 15 minutes 
     global cache
@@ -60,23 +61,22 @@ def get_latest_race_data():
 
     # Track data
     # Set default values
-    map_uri=description = ""
+    track_name=map_uri=description = ""
     turns=laps=drs_detection_zones=drs_zones=distance=0
     
-    # Retrieve track data from local csv
-    track_csv = csv.reader(open(TRACK_INFORMATION, "r"))
-    for track in track_csv:
-        if track[0] == unidecode(race["Circuit"]["circuitName"]):
-            map_uri = track[1]
-            turns = track[2]
-            laps = track[3]
-            distance = track[4]
-            drs_detection_zones = track[5]
-            drs_zones = track[6]
-            description = track[7]
-            
+    # Retrieve track data from database
+    track_entry = request.app.database["tracks"].find_one({"name": race["Circuit"]["circuitName"]})
+    if "name" in track_entry:
+        track_name = track_entry["name"]
+        map_uri = track_entry["mapUri"]
+        turns = track_entry["turns"]
+        laps = track_entry["laps"]
+        distance = track_entry["distance"]
+        drs_detection_zones = track_entry["drsDetectionZones"]
+        drs_zones = track_entry["drsZones"]
+        
     track = race_classes.Track(
-        name = race["Circuit"]["circuitName"],
+        name = track_name,
         mapUri = map_uri,
         turns = turns,
         laps = laps,
@@ -106,14 +106,12 @@ def get_latest_race_data():
         race = race_weather
     )
 
-
-    # Retrieve track data from local csv
+    # Retrieve track data from database
     highlights_uri = ""
-    highlights_csv = csv.reader(open(HIGHLIGHTS_INFORMATION, "r"))
-    for highlights in highlights_csv:
-        if highlights[0] == unidecode(race["season"]) and highlights[1] == unidecode(race["round"]):
-            highlights_uri = highlights[3]
-
+    highlights_entry = request.app.database["highlights"].find_one({"year": int(race["season"]), "round": int(race["round"])})
+    if "uri" in highlights_entry:
+        highlights_uri = highlights_entry["uri"]
+    
     highlights = race_classes.Highlights(
         uri = highlights_uri
     )
