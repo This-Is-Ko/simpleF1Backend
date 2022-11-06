@@ -18,8 +18,18 @@ from .weather_code_converter import convert_weather_code
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
 
+cache = {}
+
 def get_latest_race_data():
-    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, }, backend="redis")
+    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
+    
+    # Simple in-memory caching response - 15 minutes 
+    global cache
+    if "race_data" in cache:
+        if cache["expiry"] > datetime.now():
+            return cache["race_data"]
+        else:
+            cache = {}
 
     race_response = call_data_source("http://ergast.com/api/f1/current/last/results.json")
     if race_response == {}:
@@ -209,6 +219,10 @@ def get_latest_race_data():
         nextRace = next_race
     )
 
+    cache.update({"race_data": race_data})
+    expiry = datetime.now() + timedelta(minutes=15)
+    cache.update({"expiry": expiry})
+    # print(cache)
     return race_data
 
 def call_data_source(api_url):
