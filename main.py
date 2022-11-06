@@ -17,7 +17,10 @@ def server_status():
 
 origins = [
     "http://localhost:3000",
-    os.environ.get("FRONTEND_URI")
+    os.environ.get("FRONTEND_URI"),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"]
 ]
 
 print(origins)
