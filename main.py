@@ -29,13 +29,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
-
-@app.on_event("startup")
-def startup_db_client():
-    app.mongodb_client = MongoClient(os.environ.get("ATLAS_URI"))
-    app.database = app.mongodb_client[os.environ.get("DB_NAME")]
-    print("Connected to MongoDB")
-    
-@app.on_event("shutdown")
-def shutdown_db_client():
-    app.mongodb_client.close()

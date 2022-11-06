@@ -15,6 +15,8 @@ import pytz
 
 from .weather_code_converter import convert_weather_code
 
+from database import database
+
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
 
@@ -64,8 +66,9 @@ def get_latest_race_data(request):
     track_name=map_uri=description = ""
     turns=laps=drs_detection_zones=drs_zones=distance=0
     
+    db = database.get_mongodb_client()
     # Retrieve track data from database
-    track_entry = request.app.database["tracks"].find_one({"name": race["Circuit"]["circuitName"]})
+    track_entry = db["tracks"].find_one({"name": race["Circuit"]["circuitName"]})
     if "name" in track_entry:
         track_name = track_entry["name"]
         map_uri = track_entry["mapUri"]
@@ -108,7 +111,7 @@ def get_latest_race_data(request):
 
     # Retrieve track data from database
     highlights_uri = ""
-    highlights_entry = request.app.database["highlights"].find_one({"year": int(race["season"]), "round": int(race["round"])})
+    highlights_entry = db["highlights"].find_one({"year": int(race["season"]), "round": int(race["round"])})
     if "uri" in highlights_entry:
         highlights_uri = highlights_entry["uri"]
     
