@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_utils.tasks import repeat_every
 
 import os
 from dotenv import load_dotenv
@@ -8,6 +9,8 @@ load_dotenv()
 from routers import race_router
 from database import database
 import pymongo
+
+from api import race_data
 
 app = FastAPI()
 
@@ -26,6 +29,12 @@ def database_status():
             return {"status": "healthy"}
     except pymongo.errors.PyMongoError as exc:
         return {"error": exc}
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * 15)  # 15 min
+def refresh_race_data_cache():
+    print("Loading cache")
+    return race_data.get_latest_race_data()
 
 origins = [
     '*',

@@ -1,19 +1,14 @@
 from schemas import race_classes
 import requests
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
-from typing import List
 import requests_cache
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 import re
 from datetime import datetime, timedelta
 import csv
 from pathlib import Path
-from unidecode import unidecode
 from tzwhere import tzwhere
 import pytz
 import pymongo
-import time
 
 from .weather_code_converter import convert_weather_code
 
@@ -24,7 +19,7 @@ HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
 
 cache = {}
 
-def get_latest_race_data(request):
+def get_latest_race_data():
     # Enable in dev env
     # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
     
@@ -32,7 +27,7 @@ def get_latest_race_data(request):
     global cache
     if "race_data" in cache:
         if cache["expiry"] > datetime.now():
-            if "track" in cache["race_data"] and "mapUri" in cache["race_data"]["track"] and cache["race_data"]["track"]["mapUri"] != "":
+            if cache["database_status"] == "success":
                 return cache["race_data"]
         else:
             cache = {}
@@ -233,6 +228,10 @@ def get_latest_race_data(request):
     )
 
     cache.update({"race_data": race_data})
+    if map_uri == "":
+        cache.update({"database_status": "error"})
+    else:
+        cache.update({"database_status": "success"})
     expiry = datetime.now() + timedelta(minutes=15)
     cache.update({"expiry": expiry})
     # print(cache)
