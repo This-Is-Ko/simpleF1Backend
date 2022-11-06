@@ -20,6 +20,8 @@ origins = [
     os.environ.get("FRONTEND_URI")
 ]
 
+print(origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins
