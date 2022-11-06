@@ -17,9 +17,13 @@ app.include_router(race_router.router)
 def server_status():
     return {"status": "healthy"}
 
+@app.get("/envtest")
+def server_status():
+    return config
+
 origins = [
     '*',
-    os.environ.get("FRONTEND_URI"),
+    config["FRONTEND_URI"],
 ]
 
 app.add_middleware(
@@ -34,7 +38,7 @@ app.add_middleware(
 def startup_db_client():
     app.mongodb_client = MongoClient(config["ATLAS_URI"])
     app.database = app.mongodb_client[config["DB_NAME"]]
-    print("Connected to the MongoDB database!")
+    print("Connected to MongoDB")
     
 @app.on_event("shutdown")
 def shutdown_db_client():
