@@ -21,7 +21,7 @@ def server_status():
 def database_status():
     try:
         db = database.get_mongodb_client()
-        track_entry = db["tracks"].find_one({"name": race["Circuit"]["circuitName"]})
+        track_entry = db["tracks"].find_one({"name": "test"})
         if "name" in track_entry:
             return {"status": "healthy"}
     except pymongo.errors.PyMongoError as exc:
