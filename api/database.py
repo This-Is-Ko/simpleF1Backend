@@ -16,3 +16,10 @@ def mongodb_api_find_one(payload):
     if response.status_code != 200:
         return {}
     return response.json()["documents"][0]
+
+def mongodb_api_insert_one(payload):
+    response = requests.post(MONGODB_API_URI + "/action/insertOne", headers=MONGODB_API_HEADERS, json=payload)
+    # print("response" + response)
+    if response.status_code != 200:
+        return {}
+    return response.json()["documents"][0]
