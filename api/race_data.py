@@ -4,15 +4,17 @@ import requests_cache
 from fastapi import HTTPException
 import re
 from datetime import datetime, timedelta
-import csv
 from pathlib import Path
 from tzwhere import tzwhere
 import pytz
-import pymongo
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from .weather_code_converter import convert_weather_code
 
-from database import database
+from .database import mongodb_api_find_one
 
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
@@ -59,38 +61,29 @@ def get_latest_race_data():
         dateTimeUtc = race_datetime_gmt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S GMT")
     )
 
-    # Track and highlight data
+    # Track data
     # Set default values
     track_name=map_uri = ""
     turns=laps=drs_detection_zones=drs_zones=distance=0
-    highlights_uri = ""
-
-    try:
-        with pymongo.timeout(10):
-            db = database.get_mongodb_client()
-            # Retrieve track data from database
-            track_entry = db["tracks"].find_one({"name": race["Circuit"]["circuitName"]})
-            if "name" in track_entry:
-                track_name = track_entry["name"]
-                map_uri = track_entry["mapUri"]
-                turns = track_entry["turns"]
-                laps = track_entry["laps"]
-                distance = track_entry["distance"]
-                drs_detection_zones = track_entry["drsDetectionZones"]
-                drs_zones = track_entry["drsZones"]
-            
-            # Retrieve highlights data from database
-            highlights_entry = db["highlights"].find_one({"year": int(race["season"]), "round": int(race["round"])})
-            if "uri" in highlights_entry:
-                highlights_uri = highlights_entry["uri"]
+    track_find_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "tracks",
+        "filter": {
+            "name": race["Circuit"]["circuitName"]
+      }
+    }
     
-    except pymongo.errors.PyMongoError as exc:
-        if exc.timeout:
-            print(f"Database call timed out: {exc!r}")
-        else:
-            print(f"Database call failed with non-timeout error: {exc!r}")
-    
-    # Save track and highlight data
+    track_response = mongodb_api_find_one(track_find_payload)
+    if "name" in track_response:
+        track_name = track_response["name"]
+        map_uri = track_response["mapUri"]
+        turns = track_response["turns"]
+        laps = track_response["laps"]
+        distance = track_response["distance"]
+        drs_detection_zones = track_response["drsDetectionZones"]
+        drs_zones = track_response["drsZones"]
+    # Save track data
     track = race_classes.Track(
         name = track_name,
         mapUri = map_uri,
@@ -101,9 +94,24 @@ def get_latest_race_data():
         distance = distance
     )
     
+    # Highlights data
+    highlights_uri = ""
+    highlights_find_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "highlights",
+        "filter": {
+            "year": int(race["season"]),
+            "round": int(race["round"])
+      }
+    }
+    highlights_response = mongodb_api_find_one(highlights_find_payload)
+    if "uri" in highlights_response:
+        highlights_uri = highlights_response["uri"]
+    # Save highlights data 
     highlights = race_classes.Highlights(
         uri = highlights_uri
-    )
+    )  
 
     # Weather data
     weather_url = "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&start_date={quali_date}&end_date={race_date}".format(
@@ -129,12 +137,6 @@ def get_latest_race_data():
     # Race result data
     race_results = []
     for entry in race["Results"]:
-
-        # Store only fastest lap driver
-        # fastest_lap_rank = ""
-        # if entry["FastestLap"]["rank"] == "1":
-        #     fastest_lap = entry["FastestLap"]["Time"]["time"]
-
         # Handle timings after 1 lap and DNFs
         if entry["status"] != "Finished":
             if re.search("\+\d Lap[s]?", entry["status"]):
