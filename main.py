@@ -18,12 +18,6 @@ app.include_router(race_router.router)
 def server_status():
     return {"status": "healthy"}
 
-# @app.on_event("startup")
-# @repeat_every(seconds=60 * 15)  # 15 min
-# def refresh_race_data_cache():
-#     print("Loading cache")
-#     return race_data.get_latest_race_data()
-
 origins = [
     '*',
     os.environ.get("FRONTEND_URI"),
