@@ -14,7 +14,7 @@ load_dotenv()
 
 from .weather_code_converter import convert_weather_code
 
-from .database import mongodb_api_find_one
+from .database import mongodb_api_find_one, mongodb_api_insert_one
 
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
@@ -29,15 +29,30 @@ def get_latest_race_data():
     global cache
     if "race_data" in cache:
         if cache["expiry"] > datetime.now():
-            if cache["database_status"] == "success":
-                return cache["race_data"]
+            return cache["race_data"]
         else:
             cache = {}
+    
 
     race_response = call_data_source("http://ergast.com/api/f1/current/last/results.json")
     if race_response == {}:
         raise HTTPException(status_code=503, detail="Upstream error")
     race = race_response["MRData"]["RaceTable"]["Races"][0]
+
+    # Check if race data is stored in database
+    race_find_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "race",
+        "filter": {
+            "race.season": int(race["season"]),
+            "race.round": int(race["round"])
+      }
+    }
+    race_response = mongodb_api_find_one(race_find_payload)
+    if "race" in race_response:
+        cache.update({"race_data": race_response})
+        return race_response
 
     # Find race timezone
     tz = tzwhere.tzwhere()
@@ -101,7 +116,7 @@ def get_latest_race_data():
         "database": os.environ.get("DB_NAME"),
         "collection": "highlights",
         "filter": {
-            "year": int(race["season"]),
+            "season": int(race["season"]),
             "round": int(race["round"])
       }
     }
@@ -230,13 +245,22 @@ def get_latest_race_data():
     )
 
     cache.update({"race_data": race_data})
-    if map_uri == "":
-        cache.update({"database_status": "error"})
-    else:
-        cache.update({"database_status": "success"})
     expiry = datetime.now() + timedelta(minutes=15)
     cache.update({"expiry": expiry})
     # print(cache)
+    # print(race_data.json())
+    
+    # Store all race data
+    race_insert_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "race",
+        "document": race_data.dict()
+    }
+    insert_response = mongodb_api_insert_one(race_insert_payload)
+    if "insertedId" in insert_response:
+        print("saved successfully")
+    
     return race_data
 
 def call_data_source(api_url):
