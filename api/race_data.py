@@ -52,6 +52,8 @@ def get_latest_race_data():
     race_response = mongodb_api_find_one(race_find_payload)
     if "race" in race_response:
         cache.update({"race_data": race_response})
+        expiry = datetime.now() + timedelta(minutes=15)
+        cache.update({"expiry": expiry})
         return race_response
 
     # Find race timezone
