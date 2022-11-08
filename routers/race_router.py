@@ -10,3 +10,7 @@ router = APIRouter(prefix="/api")
 @router.get("/latest", response_model=race_classes.RaceData)
 def latest_race_data():
     return race_data.get_latest_race_data()
+
+@router.get("/update", status_code=200)
+def update_race_data():
+    return race_data.update_latest_race_data()

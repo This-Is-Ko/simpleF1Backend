@@ -14,17 +14,15 @@ load_dotenv()
 
 from .weather_code_converter import convert_weather_code
 
-from .database import mongodb_api_find_one, mongodb_api_insert_one
+from .database import mongodb_api_find_one, mongodb_api_insert_one, mongodb_api_is_present
 
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
+tz = tzwhere.tzwhere()
 
 cache = {}
 
 def get_latest_race_data():
-    # Enable in dev env
-    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
-    
     # Simple in-memory caching response - 15 minutes 
     global cache
     if "race_data" in cache:
@@ -32,11 +30,8 @@ def get_latest_race_data():
             return cache["race_data"]
         else:
             cache = {}
-    
 
     race_response = call_data_source("http://ergast.com/api/f1/current/last/results.json")
-    if race_response == {}:
-        raise HTTPException(status_code=503, detail="Upstream error")
     race = race_response["MRData"]["RaceTable"]["Races"][0]
 
     # Check if race data is stored in database
@@ -55,10 +50,36 @@ def get_latest_race_data():
         expiry = datetime.now() + timedelta(minutes=15)
         cache.update({"expiry": expiry})
         return race_response
+    
+    raise HTTPException(status_code=400, detail="Error during processing")
+
+
+def update_latest_race_data():
+    # Enable in dev env
+    # requests_cache.install_cache("race_data_responses", allowable_methods=('GET'), allowable_codes=(200,), urls_expire_after={"http://ergast.com/api/f1/": 36000, })
+    
+    race_response = call_data_source("http://ergast.com/api/f1/current/last/results.json")
+    race = race_response["MRData"]["RaceTable"]["Races"][0]
+
+    # Check if race data is stored in database
+    race_find_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "race",
+        "filter": {
+            "race.season": int(race["season"]),
+            "race.round": int(race["round"])
+      }
+    }
+    is_race_present = mongodb_api_is_present(race_find_payload)
+    if is_race_present == True:
+        return {"status": "Up to date"}
 
     # Find race timezone
-    tz = tzwhere.tzwhere()
-    timezone = tz.tzNameAt(float(race["Circuit"]["Location"]["lat"]),float(race["Circuit"]["Location"]["long"]))
+    timezone = tz.tzNameAt(
+        float(race["Circuit"]["Location"]["lat"]),
+        float(race["Circuit"]["Location"]["long"])
+    )
     race_timezone = pytz.timezone(timezone)
     # Create datetime object 
     race_datetime_str = str(race["date"]) + " " + str(race["time"])
@@ -67,7 +88,7 @@ def get_latest_race_data():
     gmt = pytz.timezone('GMT')
     race_datetime_gmt = gmt.localize(race_datetime)
 
-    # Convert datetime to race location timezone and send
+    # Convert datetime to race location timezone
     race_info = race_classes.RaceInfo(
         name = race["raceName"],
         city = race["Circuit"]["Location"]["locality"],
@@ -246,12 +267,6 @@ def get_latest_race_data():
         nextRace = next_race
     )
 
-    cache.update({"race_data": race_data})
-    expiry = datetime.now() + timedelta(minutes=15)
-    cache.update({"expiry": expiry})
-    # print(cache)
-    # print(race_data.json())
-    
     # Store all race data
     race_insert_payload = {
         "dataSource": os.environ.get("MONGODB_CLUSTER"),
@@ -261,13 +276,13 @@ def get_latest_race_data():
     }
     insert_response = mongodb_api_insert_one(race_insert_payload)
     if "insertedId" in insert_response:
-        print("saved successfully")
-    
-    return race_data
+        return {"status": "Successfully updated with new race data"}
+    else:
+        raise HTTPException(status_code=400, detail="Updating race data failed")
 
 def call_data_source(api_url):
     response = requests.get(api_url)
     # print("response" + response)
     if response.status_code != 200:
-        return {}
+        raise HTTPException(status_code=500, detail="Upstream error")
     return response.json()
