@@ -1,20 +1,22 @@
 from schemas import race_classes
-import requests
 import requests_cache
 from fastapi import HTTPException
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from tzwhere import tzwhere
 import pytz
+from youtubesearchpython import ChannelSearch, ResultMode, CustomSearch, VideoSortOrder
 
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
+from .utils import call_data_source
+
 from .weather_code_converter import convert_weather_code
 
-from .database import mongodb_api_find_one, mongodb_api_insert_one, mongodb_api_is_present
+from .database import mongodb_api_find_one, mongodb_api_insert_one, mongodb_api_is_present, mongodb_api_update_one
 
 TRACK_INFORMATION = Path(__file__).parent /"./../data/tracks.csv"
 HIGHLIGHTS_INFORMATION = Path(__file__).parent /"./../data/highlights.csv"
@@ -38,7 +40,7 @@ def get_latest_race_data():
     race_find_payload = {
         "dataSource": os.environ.get("MONGODB_CLUSTER"),
         "database": os.environ.get("DB_NAME"),
-        "collection": "race",
+        "collection": "races",
         "filter": {
             "race.season": int(race["season"]),
             "race.round": int(race["round"])
@@ -65,7 +67,7 @@ def update_latest_race_data():
     race_find_payload = {
         "dataSource": os.environ.get("MONGODB_CLUSTER"),
         "database": os.environ.get("DB_NAME"),
-        "collection": "race",
+        "collection": "races",
         "filter": {
             "race.season": int(race["season"]),
             "race.round": int(race["round"])
@@ -102,7 +104,7 @@ def update_latest_race_data():
     # Track data
     # Set default values
     track_name=map_uri = ""
-    turns=laps=drs_detection_zones=drs_zones=distance=0
+    turns=length=laps=drs_detection_zones=drs_zones=distance=0
     track_find_payload = {
         "dataSource": os.environ.get("MONGODB_CLUSTER"),
         "database": os.environ.get("DB_NAME"),
@@ -117,6 +119,7 @@ def update_latest_race_data():
         track_name = track_response["name"]
         map_uri = track_response["mapUri"]
         turns = track_response["turns"]
+        length = track_response["length"]
         laps = track_response["laps"]
         distance = track_response["distance"]
         drs_detection_zones = track_response["drsDetectionZones"]
@@ -126,6 +129,7 @@ def update_latest_race_data():
         name = track_name,
         mapUri = map_uri,
         turns = turns,
+        length = length,
         laps = laps,
         drsDetectionZones = drs_detection_zones,
         drsZones = drs_zones,
@@ -133,20 +137,9 @@ def update_latest_race_data():
     )
     
     # Highlights data
+    # Store black highlights link
+    # Will retrieve highlights in separate cron job call
     highlights_uri = ""
-    highlights_find_payload = {
-        "dataSource": os.environ.get("MONGODB_CLUSTER"),
-        "database": os.environ.get("DB_NAME"),
-        "collection": "highlights",
-        "filter": {
-            "season": int(race["season"]),
-            "round": int(race["round"])
-      }
-    }
-    highlights_response = mongodb_api_find_one(highlights_find_payload)
-    if "uri" in highlights_response:
-        highlights_uri = highlights_response["uri"]
-    # Save highlights data 
     highlights = race_classes.Highlights(
         uri = highlights_uri
     )  
@@ -271,18 +264,63 @@ def update_latest_race_data():
     race_insert_payload = {
         "dataSource": os.environ.get("MONGODB_CLUSTER"),
         "database": os.environ.get("DB_NAME"),
-        "collection": "race",
+        "collection": "races",
         "document": race_data.dict()
     }
     insert_response = mongodb_api_insert_one(race_insert_payload)
     if "insertedId" in insert_response:
         return {"status": "Successfully updated with new race data"}
     else:
-        raise HTTPException(status_code=400, detail="Updating race data failed")
+        raise HTTPException(status_code=400, detail="Updating race data failed for " + race["season"] + " - Round " + race["round"])
 
-def call_data_source(api_url):
-    response = requests.get(api_url)
-    # print("response" + response)
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Upstream error")
-    return response.json()
+
+def find_latest_highlights_yt():
+    race_response = call_data_source("http://ergast.com/api/f1/current/last/results.json")
+    race = race_response["MRData"]["RaceTable"]["Races"][0]
+    # Check if highlights is stored in database
+    race_find_payload = {
+        "dataSource": os.environ.get("MONGODB_CLUSTER"),
+        "database": os.environ.get("DB_NAME"),
+        "collection": "races",
+        "filter": {
+            "race.season": int(race["season"]),
+            "race.round": int(race["round"])
+      }
+    }
+    race_entry = mongodb_api_find_one(race_find_payload)
+    if race_entry["highlights"]["uri"] != "":
+        return {"status": "Highlights already exist for " + race["season"] + " - Round " + race["round"]}
+    
+    # Search for highlights
+    search = ChannelSearch('Race Highlights | ' + race["season"] + "", "UCB_qr75-ydFVKSF9Dmo6izg", 'en', 'US').result(mode = ResultMode.dict)
+    highlights_video_code = ""
+    for video in search["result"]:
+        if re.search("^Race Highlights \| " + race["season"] + " .* Grand Prix", video["title"]) and re.search("^.* (hour|minute)(|s) ago$", str(video["published"]).lower()):
+            highlights_video_code = str(video["uri"])
+            highlights_video_code = highlights_video_code.replace("/watch?v=", "")
+             # Store highlights
+            highlights_insert_payload = {
+                "dataSource": os.environ.get("MONGODB_CLUSTER"),
+                "database": os.environ.get("DB_NAME"),
+                "collection": "races",
+                "filter": {
+                    "_id": {
+                        "$oid": str(race_entry["_id"]) 
+                    } 
+                },
+                "update": {
+                    "$set": {
+                        "highlights.uri": "https://www.youtube.com/embed/" + highlights_video_code
+                    }
+                }
+            }
+            update_response = mongodb_api_update_one(highlights_insert_payload)
+            if "modifiedCount" in update_response and update_response["modifiedCount"] == 1:
+                # Successful update
+                # Clear cache so next call will contain highlights
+                global cache
+                cache = {}
+                return {"status": "Successfully added highlights for " + race["season"] + " - Round " + race["round"]}
+            else:
+                raise HTTPException(status_code=400, detail="Updating highlights data failed")
+    return {"status": "Couldn't find highlights for " + race["season"] + " - Round " + race["round"]}

@@ -17,7 +17,7 @@ def mongodb_api_find_one(payload):
     if response.status_code != 200:
         raise HTTPException(status_code=500, detail="Upstream error")
     if len(response.json()["documents"]) != 1:
-         raise HTTPException(status_code=403, detail="Race not found")
+         raise HTTPException(status_code=403, detail=payload["collection"] + " resource not found")
     return response.json()["documents"][0]
 
 def mongodb_api_is_present(payload):
@@ -33,5 +33,12 @@ def mongodb_api_is_present(payload):
 def mongodb_api_insert_one(payload):
     response = requests.post(MONGODB_API_URI + "/action/insertOne", headers=MONGODB_API_HEADERS, json=payload)
     if response.status_code != 201:
+        raise HTTPException(status_code=500, detail="Upstream error")
+    return response.json()
+
+def mongodb_api_update_one(payload):
+    response = requests.post(MONGODB_API_URI + "/action/updateOne", headers=MONGODB_API_HEADERS, json=payload)
+    print(response.json())
+    if response.status_code != 200:
         raise HTTPException(status_code=500, detail="Upstream error")
     return response.json()

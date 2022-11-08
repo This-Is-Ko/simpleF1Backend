@@ -14,3 +14,8 @@ def latest_race_data():
 @router.get("/update", status_code=200)
 def update_race_data():
     return race_data.update_latest_race_data()
+
+@router.get("/update/highlights", status_code=200)
+def update_highlights_data():
+    return race_data.find_latest_highlights_yt()
+

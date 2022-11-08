@@ -16,8 +16,9 @@ class Track(BaseModel):
     name: str
     mapUri: str
     turns: int
+    length: float
     laps: int
-    distance: int
+    distance: float
     drsDetectionZones: int
     drsZones: int
     
