@@ -44,6 +44,9 @@ class ResultEntry(BaseModel):
     teamLogoAlt: str
     fastestLap: str
     fastestLapRank: int
+    gridPosition: int
+    positionChange: int
+    # positionChangeDirection: str
 
 class DriverStandingEntry(BaseModel):
     position: int

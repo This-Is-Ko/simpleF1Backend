@@ -188,7 +188,9 @@ def update_latest_race_data():
             teamLogoUri = entry["Constructor"]["name"].replace(" ",""),
             teamLogoAlt = entry["Constructor"]["name"] + " logo",
             fastestLap = entry["FastestLap"]["Time"]["time"],
-            fastestLapRank = entry["FastestLap"]["rank"]
+            fastestLapRank = entry["FastestLap"]["rank"],
+            gridPosition = entry["grid"],
+            positionChange =  int(entry["grid"]) - int(entry["position"])
         )
         race_results.append(driver_standing_entry)
 
