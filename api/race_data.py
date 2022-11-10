@@ -326,3 +326,8 @@ def find_latest_highlights_yt():
             else:
                 raise HTTPException(status_code=400, detail="Updating highlights data failed")
     return {"status": "Couldn't find highlights for " + race["season"] + " - Round " + race["round"]}
+
+def free_cache():
+    global cache
+    cache = {}
+    return {"status": "Cache cleared"}

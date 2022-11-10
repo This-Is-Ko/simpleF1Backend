@@ -19,3 +19,6 @@ def update_race_data():
 def update_highlights_data():
     return race_data.find_latest_highlights_yt()
 
+@router.get("/update/cache", status_code=200)
+def update_cache():
+    return race_data.free_cache()
