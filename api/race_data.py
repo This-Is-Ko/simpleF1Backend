@@ -176,6 +176,12 @@ def update_latest_race_data():
                 race_time = "DNF"
         else:
             race_time = entry["Time"]["time"]
+            
+        fastestLap = ""
+        fastestLapRank = 0
+        if "FastestLap" in entry:
+            fastestLap = entry["FastestLap"]["Time"]["time"]
+            fastestLapRank = entry["FastestLap"]["rank"]
 
         driver_standing_entry = race_classes.ResultEntry(
             position = entry["position"],
@@ -187,8 +193,8 @@ def update_latest_race_data():
             team = entry["Constructor"]["name"],
             teamLogoUri = entry["Constructor"]["name"].replace(" ",""),
             teamLogoAlt = entry["Constructor"]["name"] + " logo",
-            fastestLap = entry["FastestLap"]["Time"]["time"],
-            fastestLapRank = entry["FastestLap"]["rank"],
+            fastestLap = fastestLap,
+            fastestLapRank = fastestLapRank,
             gridPosition = entry["grid"],
             positionChange =  int(entry["grid"]) - int(entry["position"])
         )
