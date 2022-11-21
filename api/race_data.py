@@ -237,25 +237,33 @@ def update_latest_race_data():
     next_race_response = call_data_source(url)
     if next_race_response == {}:
         raise HTTPException(status_code=503, detail="Upstream error")
-    next_race_data = next_race_response["MRData"]["RaceTable"]["Races"][0]
-    
-    # Find race timezone
-    timezone = tz.tzNameAt(float(next_race_data["Circuit"]["Location"]["lat"]),float(next_race_data["Circuit"]["Location"]["long"]))
-    next_race_timezone = pytz.timezone(timezone)
-    # Create datetime object 
-    next_race_datetime_str = str(next_race_data["date"]) + " " + str(next_race_data["time"])
-    next_race_datetime = datetime.strptime(next_race_datetime_str, "%Y-%m-%d %H:%M:%SZ")
-    # Set datetime to greenwich time
-    gmt = pytz.timezone('GMT')
-    next_race_datetime_gmt = gmt.localize(next_race_datetime)
-    
-    next_race = race_classes.NextRace(
-        name = next_race_data["raceName"],
-        country = next_race_data["Circuit"]["Location"]["country"],
-        track = next_race_data["Circuit"]["circuitName"],
-        raceDateTime = next_race_datetime_gmt.astimezone(next_race_timezone).strftime("%Y-%m-%d %H:%M:%S"),
-        dateTimeUtc = next_race_datetime_gmt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S GMT"),
-    )
+    if int(next_race_response["MRData"]["total"]) > 0: 
+        next_race_data = next_race_response["MRData"]["RaceTable"]["Races"][0]
+        # Find race timezone
+        timezone = tz.tzNameAt(float(next_race_data["Circuit"]["Location"]["lat"]),float(next_race_data["Circuit"]["Location"]["long"]))
+        next_race_timezone = pytz.timezone(timezone)
+        # Create datetime object 
+        next_race_datetime_str = str(next_race_data["date"]) + " " + str(next_race_data["time"])
+        next_race_datetime = datetime.strptime(next_race_datetime_str, "%Y-%m-%d %H:%M:%SZ")
+        # Set datetime to greenwich time
+        gmt = pytz.timezone('GMT')
+        next_race_datetime_gmt = gmt.localize(next_race_datetime)
+        
+        next_race = race_classes.NextRace(
+            name = next_race_data["raceName"],
+            country = next_race_data["Circuit"]["Location"]["country"],
+            track = next_race_data["Circuit"]["circuitName"],
+            raceDateTime = next_race_datetime_gmt.astimezone(next_race_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+            dateTimeUtc = next_race_datetime_gmt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S GMT"),
+        )
+    else:
+        next_race = race_classes.NextRace(
+            name = "-",
+            country = "-",
+            track = "-",
+            raceDateTime = "-",
+            dateTimeUtc = "-",
+        )
 
     race_data = race_classes.RaceData(
         race = race_info,
